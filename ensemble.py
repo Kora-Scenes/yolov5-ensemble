@@ -3,6 +3,13 @@ from lxml import etree
 import glob
 import numpy as np
 
+yolo_metrics = {
+			'tp':0, 	# iou>thresh
+			'fp': 0, 	# 0<iou<thresh
+			'fn':0		# iou==0	
+		}
+iou_list = []
+
 def listBoxes(pathDir):
 
     boxesAllXmls = []#list that stores all the lists of all xml boxes
@@ -35,25 +42,39 @@ def listBoxes(pathDir):
                     boxes.append([name, xmin, ymin, xmax, ymax, prob])
                     j = j+1
         boxesAllXmls.append((nameFich,boxes))
-        
     return boxesAllXmls
 
 
 def uneBoundingBoxes(boxesAllXmls):
-    #print(boxesAllXmls)
+
     boundingBox=[]
     listBox = []
     l=len(boxesAllXmls)
+    print(l)
+    largest_iou = 0.0
+    iou_thresh = 0.5
     while(l>0):
         boxPrim=boxesAllXmls[0]
-        #print(boxPrim)
 
         listBox.append(boxPrim)
+        print(listBox)
         boxesAllXmls1=boxesAllXmls[1:]
         boxesAllXmls.remove(boxPrim)
         for box in boxesAllXmls1:
-            if boxPrim[0]==box[0] and bb_intersection_over_union(boxPrim[1:5], box[1:5]) > 0.5:
-
+            if boxPrim[0]==box[0]:
+                get_iou = bb_intersection_over_union(boxPrim[1:5], box[1:5])
+                #if  get_iou > largest_iou: 
+                    #largest_iou = get_iou
+                    
+                if get_iou==0:
+                    yolo_metrics['fn'] += 1
+                else:
+                    if get_iou>iou_thresh:
+                        yolo_metrics['tp'] += 1
+                    else:
+                        yolo_metrics['fp'] += 1
+                
+                iou_list.append(get_iou)
                 listBox.append(box)
                 boxesAllXmls.remove(box)
 
@@ -149,3 +170,19 @@ def nonMaximumSuppression(boxes, overlapThresh):
         idxs = np.delete(idxs, suppress)
     # return only the bounding boxes that were picked
     return boxes[pick], probFinal
+    
+    
+def getResults():
+    prec = yolo_metrics['tp'] / float(yolo_metrics['tp'] + yolo_metrics['fp'])
+    recall = yolo_metrics['tp'] / float(yolo_metrics['tp'] + yolo_metrics['fn'])
+    f1_score = 2*prec*recall/(prec+recall)
+    iou_avg = sum(iou_list) / len(iou_list)
+    results = {
+              'prec': prec,
+              'recall': recall,
+              'f1_score': f1_score,
+              'iou_avg': iou_avg,
+              'confusion': yolo_metrics
+		}
+    return results
+    
